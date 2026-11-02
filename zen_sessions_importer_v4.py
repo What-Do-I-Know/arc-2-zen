@@ -59,7 +59,7 @@ def generate_uuid() -> str:
     return f"{{{uuid.uuid4()}}}"
 
 
-def create_zen_tab(arc_tab: Dict, workspace_uuid: str, group_id: str, timestamp: int, tab_index: int) -> Dict:
+def create_zen_tab(arc_tab: Dict, workspace_uuid: str, group_id: str, timestamp: int, tab_index: int, user_context_id: int = 0) -> Dict:
     """Create a Zen tab entry matching Zen format (as of JAN 2026)."""
     url = arc_tab.get('url', 'about:blank')
     title = arc_tab.get('title', 'Untitled')
@@ -110,7 +110,7 @@ def create_zen_tab(arc_tab: Dict, workspace_uuid: str, group_id: str, timestamp:
         },
         "_zenIsActiveTab": False,
         "searchMode": None,
-        "userContextId": 0,
+        "userContextId": user_context_id,
         "attributes": {},
         "index": tab_index,
         "image": ""
@@ -286,6 +286,11 @@ def main():
     for arc_space in arc_data['spaces']:
         space_name = arc_space['space_name']
         workspace_uuid = workspace_map[space_name]
+        # A space's container only applies to tabs opened later, so imported tabs need it set explicitly
+        space_container = next(
+            (s.get('containerTabId') or 0 for s in zen_data['spaces'] if s['uuid'] == workspace_uuid),
+            0,
+        )
 
         logger.info(f"\n📦 Processing: {space_name}")
         logger.info(f"   {arc_space['total_pinned_tabs']} tabs, {arc_space['total_folders']} folders")
@@ -342,7 +347,14 @@ def main():
                 group_id = folder_map[default_folder_key]
 
             # Create tab
-            zen_tab = create_zen_tab(arc_tab, workspace_uuid, group_id, base_timestamp + tab_index, tab_index)
+            zen_tab = create_zen_tab(
+                arc_tab,
+                workspace_uuid,
+                group_id,
+                base_timestamp + tab_index,
+                tab_index,
+                user_context_id=0 if arc_tab.get('is_essential') else space_container,
+            )
             zen_data['tabs'].append(zen_tab)
             tab_index += 1
 
