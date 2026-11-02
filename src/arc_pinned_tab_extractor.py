@@ -30,6 +30,7 @@ class ArcPinnedTab:
     parent_id: str
     index: int  # Original position in Arc sidebar
     is_essential: bool = False  # True if this was an Essential tab in Arc
+    has_custom_title: bool = False  # True if the tab was renamed in Arc, rather than showing its page title
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for serialization."""
@@ -210,7 +211,8 @@ class ArcPinnedTabExtractor:
                                         folder_path=folder_path,
                                         tab_id=item_id,
                                         parent_id=item_data.get('parentID', ''),
-                                        index=global_index  # Preserve original order
+                                        index=global_index,  # Preserve original order
+                                        has_custom_title=bool(item_data.get('title')),
                                     )
                                     pinned_tabs_by_space[space_id].append(pinned_tab)
 
@@ -279,7 +281,8 @@ class ArcPinnedTabExtractor:
                                                 folder_path=current_folder_path.copy(),  # Use current folder path
                                                 tab_id=item_id,
                                                 parent_id=item_data.get('parentID', ''),
-                                                index=next_index
+                                                index=next_index,
+                                                has_custom_title=bool(item_data.get('title')),
                                             )
                                             pinned_tabs.append(pinned_tab)
                                             next_index += 1
@@ -828,7 +831,8 @@ class ArcPinnedTabExtractor:
                             space_name=space_name,
                             folder_path=folder_path,
                             tab_id=item_id,
-                            parent_id=parent_id
+                            parent_id=parent_id,
+                            has_custom_title=bool(item_data.get('title')),
                         )
                         pinned_tabs.append(pinned_tab)
 

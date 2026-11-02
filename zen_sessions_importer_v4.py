@@ -116,6 +116,10 @@ def create_zen_tab(arc_tab: Dict, workspace_uuid: str, group_id: str, timestamp:
         "image": ""
     }
 
+    # Without a static label, the page's own <title> replaces the Arc name once the tab loads
+    if arc_tab.get('has_custom_title'):
+        tab["zenStaticLabel"] = title
+
     return tab
 
 
