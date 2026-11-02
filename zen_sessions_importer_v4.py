@@ -6,13 +6,16 @@ Supports nested folder structures with correct parentId relationships.
 """
 
 import lz4.block
+import base64
 import json
 import logging
+import sqlite3
 import struct
 import uuid
 from pathlib import Path
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
+from urllib.parse import urlsplit
 import shutil
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -57,6 +60,58 @@ def write_mozilla_lz4(filepath: Path, data: Dict[str, Any]):
 def generate_uuid() -> str:
     """Generate a UUID in Zen's format."""
     return f"{{{uuid.uuid4()}}}"
+
+
+class ArcFavicons:
+    """Looks up cached site icons in Arc's Favicons database, as data: URIs."""
+
+    PATH = Path.home() / "Library" / "Application Support" / "Arc" / "User Data" / "Default" / "Favicons"
+
+    def __init__(self):
+        self.con = None
+        if self.PATH.exists():
+            uri = "file:" + str(self.PATH).replace(" ", "%20") + "?mode=ro&immutable=1"
+            self.con = sqlite3.connect(uri, uri=True)
+        else:
+            logger.warning(f"⚠️ Arc favicons not found at {self.PATH}; tabs will load icons when opened")
+
+    def _rows(self, where: str, arg: str) -> List[Tuple]:
+        return self.con.execute(
+            f"""
+            SELECT b.width, b.height, b.image_data
+            FROM icon_mapping m
+            JOIN favicon_bitmaps b ON b.icon_id = m.icon_id
+            WHERE {where} AND b.image_data IS NOT NULL AND length(b.image_data) > 0
+            """,
+            (arg,),
+        ).fetchall()
+
+    def lookup(self, url: str) -> Optional[str]:
+        if not self.con or not url:
+            return None
+        rows = self._rows("m.page_url = ?", url)
+        if not rows:
+            parts = urlsplit(url)
+            if parts.scheme in ("http", "https") and parts.netloc:
+                rows = self._rows("m.page_url LIKE ?", f"{parts.scheme}://{parts.netloc}/%")
+        if not rows:
+            return None
+        _, _, image = min(rows, key=lambda r: (abs((r[0] or r[1] or 0) - 32), len(r[2])))
+        return f"data:{self._mime_type(image)};base64,{base64.b64encode(image).decode('ascii')}"
+
+    @staticmethod
+    def _mime_type(data: bytes) -> str:
+        if data.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        if data.startswith((b"GIF87a", b"GIF89a")):
+            return "image/gif"
+        if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+            return "image/webp"
+        if data.startswith(b"\x00\x00\x01\x00"):
+            return "image/x-icon"
+        if data.lstrip().startswith(b"<svg"):
+            return "image/svg+xml"
+        return "image/png"
 
 
 def create_zen_tab(arc_tab: Dict, workspace_uuid: str, group_id: str, timestamp: int, tab_index: int, user_context_id: int = 0) -> Dict:
@@ -286,6 +341,7 @@ def main():
 
     # Import tabs and folders with proper nesting
     tab_index = 0
+    favicons = ArcFavicons()
 
     for arc_space in arc_data['spaces']:
         space_name = arc_space['space_name']
@@ -359,6 +415,11 @@ def main():
                 tab_index,
                 user_context_id=0 if arc_tab.get('is_essential') else space_container,
             )
+            # Unloaded pinned tabs only show the icon stored in the session, so carry Arc's over
+            icon = favicons.lookup(arc_tab.get('url'))
+            if icon:
+                zen_tab['image'] = icon
+                zen_tab['_zenPinnedInitialState']['image'] = icon
             zen_data['tabs'].append(zen_tab)
             tab_index += 1
 
