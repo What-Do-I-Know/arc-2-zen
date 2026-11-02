@@ -301,6 +301,19 @@ def main():
         zen_data['groups'].extend(space_groups)
         tab_index += len(space_folders)
 
+        # Zen drops any folder without a tab on load, which orphans folders that only hold subfolders
+        for folder in space_folders:
+            placeholder = create_zen_tab(
+                {'url': 'about:blank', 'title': 'New Tab'},
+                workspace_uuid,
+                folder['id'],
+                base_timestamp + tab_index,
+                tab_index,
+            )
+            placeholder['zenIsEmpty'] = True
+            zen_data['tabs'].append(placeholder)
+            tab_index += 1
+
         # Process tabs
         for arc_tab in arc_space['pinned_tabs']:
             # Determine which folder this tab belongs to
