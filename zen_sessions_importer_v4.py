@@ -215,7 +215,7 @@ def main():
     zen_profile = Path.home() / "Library" / "Application Support" / "zen" / "Profiles"
     profile = None
     for p in zen_profile.iterdir():
-        if p.is_dir() and "PROFILE" in p.name:
+        if p.is_dir() and "Default (release)" in p.name:
             profile = p
             break
 
